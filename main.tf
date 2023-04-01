@@ -64,8 +64,8 @@ resource "azurerm_network_security_rule" "twnsgrule" {
 # Create network interface
 resource "azurerm_network_interface" "twnic" {
   name                = var.network_nic_name
-  location            = azurerm_network_security_group.twnsg.location
-  resource_group_name = azurerm_network_security_group.twnsg.name
+  location            = azurerm_resource_group.twrg.location
+  resource_group_name = azurerm_resource_group.twrg.name
 
   ip_configuration {
     name                          = "twnicipconfiguration"
@@ -107,7 +107,54 @@ resource "random_pet" "prefix" {
 }
 
 # Create storage account for boot diagnostics
+resource "azurerm_storage_account" "twsta" {
+  name                     = "diag${random_id.random_id.hex}"
+  location                 = azurerm_resource_group.twrg.location
+  resource_group_name      = azurerm_resource_group.twrg.name
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
 
 # Create virtual machine
+resource "azurerm_windows_virtual_machine" "twvm" {
+  name                  = "${var.prefix}-vm"
+  admin_username        = "azureadmin"
+  admin_password        = random_password.password.result
+  location              = azurerm_resource_group.twrg.location
+  resource_group_name   = azurerm_resource_group.twrg.name
+  network_interface_ids = [azurerm_network_interface.twnic.id]
+  size                  = "Standard_DS1_v2"
+
+  os_disk {
+    name                 = "twosdisk"
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+
+  boot_diagnostics {
+    storage_account_uri = azurerm_storage_account.twsta.primary_blob_endpoint
+  }
+}
 
 # Install IIS web server to the virtual machine
+resource "azurerm_virtual_machine_extension" "twwebserver" {
+  name                       = "${random_pet.prefix.id}-wsi"
+  virtual_machine_id         = azurerm_windows_virtual_machine.twvm.id
+  publisher                  = "Microsoft.Compute"
+  type                       = "CustomScriptExtension"
+  type_handler_version       = "1.8"
+  auto_upgrade_minor_version = true
+
+  settings = <<SETTINGS
+    {
+      "commandToExecute": "powershell -ExecutionPolicy Unrestricted Install-WindowsFeature -Name Web-Server -IncludeAllSubFeature -IncludeManagementTools"
+    }
+  SETTINGS
+}
