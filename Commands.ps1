@@ -39,6 +39,7 @@ terraform apply -var 'replicationType=GRS' -auto-approve
 #To visually see
 terraform graph > base.dot
 # could sent directly with graphviz installed https://graphviz.gitlab.io/download/
+# install graphviz with scoop => first install scoop => iwr -useb get.scoop.sh | iex => scoop install graphviz
 terraform graph | dot -Tsvg > graph.svg
 
 #If resources changed outside of terraform and state not current
